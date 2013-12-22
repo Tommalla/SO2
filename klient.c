@@ -27,11 +27,11 @@ int main(const int argc, const char** argv) {
 	struct Message msg;
 
 	//announce self to the server
-	msg.type = 1;
-	sprintf(msg.text, "%ld %d %d", (long)pid, k, n);
+	msg.mtype = 1;
+	sprintf(msg.mtext, "%ld %d %d", (long)pid, k, n);
 
 	printf("Sending message...\n");
-	if (msgsnd(ipcOut, (char*) &msg, strlen(msg.text) + 1, 0) != 0)
+	if (msgsnd(ipcOut, (char*) &msg, strlen(msg.mtext) + 1, 0) != 0)
 		syserr("Error on msgsnd in klient! Exiting...");
 
 	printf("Waiting for the response...\n");
@@ -43,8 +43,8 @@ int main(const int argc, const char** argv) {
 	sleep(s);
 
 	//free the resources
-	msg.type = pid;
-	sprintf(msg.text, "1");
+	msg.mtype = pid;
+	sprintf(msg.mtext, "1");
 
 	if (msgsnd(ipcOut, (char*) &msg, 2, 0) != 0)
 		syserr("Error trying to free the resources!");

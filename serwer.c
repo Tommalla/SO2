@@ -62,8 +62,8 @@ void* client_handler(void* data) {
 
 	//get start communication
 	struct Message msg;
-	msg.type = pid;
-	sprintf(msg.text, "1");
+	msg.mtype = pid;
+	sprintf(msg.mtext, "1");
 
 	if (msgsnd(ipcOut, (char*) &msg, 2, 0) != 0)
 		syserr("Error while informing the client!");
@@ -135,8 +135,8 @@ int main(const int argc, const char** argv) {
 		}
 
 		info = (struct ClientInfo*) malloc(sizeof(struct ClientInfo));
-		if (getClientInfo(msg.text, strlen(msg.text), info) == -1) {
-			printf("Warning: got an incorrect message from a client: '%s'. Ignoring...\n", msg.text);
+		if (getClientInfo(msg.mtext, strlen(msg.mtext), info) == -1) {
+			printf("Warning: got an incorrect message from a client: '%s'. Ignoring...\n", msg.mtext);
 			continue;
 		}
 

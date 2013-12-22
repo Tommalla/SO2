@@ -9,8 +9,8 @@
 #define KEY_OUT 1337L
 
 struct Message {
-	long type;     /* type of communicate (>0) */
-	char text[BUF_SIZE];  /* data */
+	long mtype;     /* type of communicate (>0) */
+	char mtext[BUF_SIZE];  /* data */
 };
 
 struct ClientInfo {
