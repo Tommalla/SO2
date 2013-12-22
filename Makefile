@@ -15,7 +15,7 @@ err.o: err.c err.h
 	gcc $(CFLAGS) -c err.c -o err.o
 
 common.o: common.c common.h
-	gcc $(CFLAGS) -c common.c -o common.o
+	gcc $(CFLAGS) $(IPC_FLAGS) -c common.c -o common.o
 
 clean:
 	rm -rf *.o
