@@ -7,7 +7,7 @@
 #include "err.h"
 
 int main(const int argc, const char** argv) {
-	int k, n, s;
+	int k = 0, n, s;
 	int ipcIn, ipcOut;
 	pid_t pid = getpid();
 
@@ -30,15 +30,18 @@ int main(const int argc, const char** argv) {
 	msg.mtype = 1;
 	sprintf(msg.mtext, "%ld %d %d", (long)pid, k, n);
 
-	printf("Sending message...\n");
+	if (debug)
+		fprintf(stderr, "Sending message...\n");
 	if (msgsnd(ipcOut, (char*) &msg, strlen(msg.mtext) + 1, 0) != 0)
 		syserr("Error on msgsnd in klient! Exiting...");
 
-	printf("Waiting for the response...\n");
+	if (debug)
+		fprintf(stderr, "Waiting for the response...\n");
 	if (msgrcv(ipcIn, &msg, BUF_SIZE, pid, 0) == 0)
 		syserr("Got wrong message from the server. Exiting...");
 
-	printf("Got the response! Executing...\n");
+	if (debug)
+		fprintf(stderr, "Got the response! Executing...\n");
 	//we have the resources
 	sleep(s);
 

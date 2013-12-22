@@ -8,21 +8,27 @@
 #include "common.h"
 #include "err.h"
 
+
 #define MAX_K 99
 
+
 typedef unsigned short int Resource;
+
 
 //common data
 //queues
 int ipcIn;
 int ipcOut;
 
+
 //mutexes and resources
 pthread_mutex_t mutex[MAX_K];
 Resource resources[MAX_K];
 Resource waitingWith[MAX_K];
+pid_t waitingPID[MAX_K];
 pthread_cond_t pairCond[MAX_K];
 pthread_cond_t resourceCond[MAX_K];
+
 
 void* client_handler(void* data) {
 	int pid, k, n;
@@ -32,7 +38,8 @@ void* client_handler(void* data) {
 	int err;
 
 	free(data);
-	printf("Inside the new thread: %d %d %d\n", pid, k, n);
+	if (debug)
+		fprintf(stderr, "Inside the new thread: %d %d %d\n", pid, k, n);
 
 	if ((err = pthread_mutex_lock(&mutex[k])) != 0)
 		syserr("Error on locking mutex[%d]: %d", k, err);
@@ -43,12 +50,17 @@ void* client_handler(void* data) {
 				syserr("Error calling wait on resourceCond[%d]: %d", k, err);
 
 		resources[k] -= n + waitingWith[k];
+
+		printf("Wątek %02x przydziela %d+%d zasobów %d klientom %d %d, pozostało %d zasobów\n",
+		       (unsigned)pthread_self(), n, waitingWith[k], k + 1, pid, waitingPID[k], resources[k]);
+
 		waitingWith[k] = 0;
 
 		if ((err = pthread_cond_signal(&pairCond[k])) != 0)
 			syserr("Error on signaling pairCond[%d]: %d", k, err);
 	} else {
 		waitingWith[k] = n;
+		waitingPID[k] = pid;
 		if ((err = pthread_cond_wait(&pairCond[k], &mutex[k])) != 0)
 			syserr("Error calling wait on pairCond[%d]: %d", k, err);
 	}
@@ -56,7 +68,8 @@ void* client_handler(void* data) {
 	if ((err = pthread_mutex_unlock(&mutex[k])) != 0)
 		syserr("Error on unlocking mutex[%d]: %d", k, err);
 
-	printf("PID: %d ready!\n", pid);
+	if (debug)
+		fprintf(stderr, "PID: %d ready!\n", pid);
 
 	//we now have a pair ready to execute
 
@@ -75,7 +88,8 @@ void* client_handler(void* data) {
 	if ((err = pthread_mutex_lock(&mutex[k])) != 0)
 		syserr("Error on locking mutex[%d]: %d", k, err);
 
-	printf("Freeing %d of %d after pid %d\n", n, k, pid);
+	if (debug)
+		fprintf(stderr, "Freeing %d of %d after pid %d\n", n, k, pid);
 	resources[k] += n;
 
 	if ((err = pthread_mutex_unlock(&mutex[k])) != 0)
@@ -87,7 +101,9 @@ void* client_handler(void* data) {
 	return (void *) 0;
 }
 
+
 struct ClientInfo* info = NULL;
+
 
 void exit_server(int sig) {
 	free(info);
@@ -96,8 +112,9 @@ void exit_server(int sig) {
 	exit(0);
 }
 
+
 int main(const int argc, const char** argv) {
-	int k, n, len;
+	int k = 0, n = 0, len = 0;
 	pthread_t th;
 	pthread_attr_t attr;
 	int err, i;
@@ -130,17 +147,18 @@ int main(const int argc, const char** argv) {
 
 	while (1) {
 		if ((len = msgrcv(ipcIn, &msg, BUF_SIZE, 1L, 0)) == 0) {
-			printf("Warning: got an empty message from a client. Ignoring...\n");
+			fprintf(stderr, "Warning: got an empty message from a client. Ignoring...\n");
 			continue;
 		}
 
 		info = (struct ClientInfo*) malloc(sizeof(struct ClientInfo));
 		if (getClientInfo(msg.mtext, strlen(msg.mtext), info) == -1) {
-			printf("Warning: got an incorrect message from a client: '%s'. Ignoring...\n", msg.mtext);
+			fprintf(stderr, "Warning: got an incorrect message from a client: '%s'. Ignoring...\n", msg.mtext);
 			continue;
 		}
 
-		printf("Creating a new thread...\n");
+		if (debug)
+			fprintf(stderr, "Creating a new thread...\n");
 
 		if ((err = pthread_attr_init(&attr)) != 0 )
 			syserr("Error on attrinit: %d", err);
