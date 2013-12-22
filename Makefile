@@ -1,6 +1,6 @@
 .PHONY: clean
 
-CFLAGS = -Wall -pedantic -std=c99
+CFLAGS = -Wall -pedantic -std=c99 -g
 IPC_FLAGS = -D_XOPEN_SOURCE=600
 
 all: serwer klient
