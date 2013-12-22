@@ -15,7 +15,7 @@ int main(const int argc, const char** argv) {
 		(s = toUnsignedNumber(argv[3], strlen(argv[3]))) == -1)
 		syserr("Wrong usage! The correct syntax is: ./klient k n s");
 
-	printf("Started with k=%d, n=%d, s=%d\n", k, n, s);
+	k--;
 
 	//FIXME privileges
 	if ((ipcIn = msgget(KEY_OUT, 0666)) == -1)
@@ -38,6 +38,7 @@ int main(const int argc, const char** argv) {
 	if (msgrcv(ipcIn, &msg, BUF_SIZE, pid, 0) == 0)
 		syserr("Got wrong message from the server. Exiting...");
 
+	printf("Got the response! Executing...\n");
 	//we have the resources
 	sleep(s);
 
@@ -47,6 +48,8 @@ int main(const int argc, const char** argv) {
 
 	if (msgsnd(ipcOut, (char*) &msg, 2, 0) != 0)
 		syserr("Error trying to free the resources!");
+
+	printf("%d KONIEC\n", pid);
 
 	return 0;
 }
