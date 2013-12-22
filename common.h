@@ -29,7 +29,6 @@ int isDigit(const char c);
 int toUnsignedNumber(const char* str, const int len);
 
 /**
- * Parses the announcement from the client and populates ClientInfo. On any error, it returns ClientInfo with
- * k = -1 and n = -1
+ * Parses the announcement from the client and populates the res. On any error, it returns -1.
  */
-struct ClientInfo getClientInfo(const char* txt, const int len);
+int getClientInfo(const char* txt, const int len, struct ClientInfo* res);

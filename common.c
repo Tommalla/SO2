@@ -1,5 +1,6 @@
 /* Tomasz Zakrzewski, nr indeksu: 336079 /
 /  SO2013 - second task			*/
+#include <stdlib.h>
 #include "common.h"
 
 int isDigit(const char c) {
@@ -20,32 +21,28 @@ int toUnsignedNumber(const char* str, const int len) {
 	return res;
 }
 
-struct ClientInfo getClientInfo(const char* txt, const int len) {
-	struct ClientInfo res;
+int getClientInfo(const char* txt, const int len, struct ClientInfo* res) {
 	int i = 0, j = 0, id;
 	long int resNum[3] = {0, 0, 0};
-	res.k = -1;
-	res.n = -1;
-
 
 	if (len < 5)
-		return res;
+		return -1;
 
 	for (id = 0; id < 3; ++id) {
 		if (!isDigit(txt[i]))
-			return res;
+			return -1;
 
 		j = i;
 		for (; i < len && isDigit(txt[i]); ++i);
 
 		if ((resNum[id] = toUnsignedNumber(txt + j, i - j)) == -1)
-			return res;
+			return -1;
 		++i;
 	}
 
-	res.pid = resNum[0];
-	res.k = resNum[1];
-	res.n = resNum[2];
+	res->pid = resNum[0];
+	res->k = resNum[1];
+	res->n = resNum[2];
 
-	return res;
+	return 0;
 }

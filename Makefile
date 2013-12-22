@@ -6,7 +6,7 @@ IPC_FLAGS = -D_XOPEN_SOURCE=600
 all: serwer klient
 
 serwer: serwer.c err.o common.o
-	gcc $(CFLAGS) $(IPC_FLAGS) serwer.c err.o common.o -o serwer
+	gcc $(CFLAGS) $(IPC_FLAGS) -pthread serwer.c err.o common.o -o serwer
 
 klient: klient.c err.o common.o
 	gcc $(CFLAGS) $(IPC_FLAGS) klient.c err.o common.o -o klient
