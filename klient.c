@@ -6,6 +6,7 @@
 #include "common.h"
 #include "err.h"
 
+
 int main(const int argc, const char** argv) {
 	int k = 0, n, s;
 	int ipcIn, ipcOut;
@@ -13,16 +14,15 @@ int main(const int argc, const char** argv) {
 
 	if (argc != 4 || (k = toUnsignedNumber(argv[1], strlen(argv[1]))) == -1 || (n = toUnsignedNumber(argv[2], strlen(argv[2]))) == -1 ||
 		(s = toUnsignedNumber(argv[3], strlen(argv[3]))) == -1)
-		syserr("Wrong usage! The correct syntax is: ./klient k n s");
+		syserr("Błędne użycie! Poprawna składnia to: ./klient k n s");
 
 	k--;
 
-	//FIXME privileges
 	if ((ipcIn = msgget(KEY_OUT, 0666)) == -1)
-		syserr("Can't open IPC queue with id %ld", KEY_IN);
+		syserr("Nie można otworzyć kolejki IPC o id %ld", KEY_IN);
 
 	if ((ipcOut = msgget(KEY_IN, 0666)) == -1)
-		syserr("Can't open IPC queue with id %ld", KEY_OUT);
+		syserr("Nie można otworzyć kolejki IPC o id %ld", KEY_OUT);
 
 	struct Message msg;
 
@@ -31,17 +31,17 @@ int main(const int argc, const char** argv) {
 	sprintf(msg.mtext, "%ld %d %d", (long)pid, k, n);
 
 	if (debug)
-		fprintf(stderr, "Sending message...\n");
+		fprintf(stderr, "Wysyłam wiadomość...\n");
 	if (msgsnd(ipcOut, (char*) &msg, strlen(msg.mtext) + 1, 0) != 0)
-		syserr("Error on msgsnd in klient! Exiting...");
+		syserr("Błąd przy msgsnd!");
 
 	if (debug)
-		fprintf(stderr, "Waiting for the response...\n");
+		fprintf(stderr, "Czekam na odpowiedź...\n");
 	if (msgrcv(ipcIn, &msg, BUF_SIZE, pid, 0) == 0)
-		syserr("Got wrong message from the server. Exiting...");
+		syserr("Otrzymałem błędną odpowiedź od serwera. Wychodzę...");
 
 	if (debug)
-		fprintf(stderr, "Got the response! Executing...\n");
+		fprintf(stderr, "Otrzymałem odpowiedź! Wykonuję się...\n");
 	//we have the resources
 	sleep(s);
 
@@ -50,7 +50,7 @@ int main(const int argc, const char** argv) {
 	sprintf(msg.mtext, "1");
 
 	if (msgsnd(ipcOut, (char*) &msg, 2, 0) != 0)
-		syserr("Error trying to free the resources!");
+		syserr("Błąd podczas próby zwolnienia zasobów!");
 
 	printf("%d KONIEC\n", pid);
 

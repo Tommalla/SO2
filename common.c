@@ -7,6 +7,7 @@ int isDigit(const char c) {
 	return '0' <= c && c <= '9';
 }
 
+
 int toUnsignedNumber(const char* str, const int len) {
 	int i;
 	int res = 0;
@@ -20,6 +21,7 @@ int toUnsignedNumber(const char* str, const int len) {
 
 	return res;
 }
+
 
 int getClientInfo(const char* txt, const int len, struct ClientInfo* res) {
 	int i = 0, j = 0, id;

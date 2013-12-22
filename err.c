@@ -14,7 +14,7 @@ extern int sys_nerr;
 void syserr(const char *fmt, ...) {
 	va_list fmt_args;
 
-	fprintf(stderr, "ERROR: ");
+	fprintf(stderr, "BŁĄD: ");
 
 	va_start(fmt_args, fmt);
 	vfprintf(stderr, fmt, fmt_args);
@@ -26,7 +26,7 @@ void syserr(const char *fmt, ...) {
 void fatal(const char *fmt, ...) {
 	va_list fmt_args;
 
-	fprintf(stderr, "ERROR: ");
+	fprintf(stderr, "BŁĄD: ");
 
 	va_start(fmt_args, fmt);
 	vfprintf(stderr, fmt, fmt_args);
