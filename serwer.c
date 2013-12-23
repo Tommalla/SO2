@@ -5,8 +5,10 @@
 #include <signal.h>
 #include <pthread.h>
 #include <stdlib.h>
+#include <stdarg.h>
+#include <errno.h>
 #include "common.h"
-#include "err.h"
+//#include "err.h"
 
 #define MAX_K 99
 
@@ -32,31 +34,52 @@ pthread_cond_t finishCond;
 volatile unsigned char interrupted = 0;
 unsigned int aliveThreads = 0;
 
+extern int sys_nerr;
+
+void cleanup();
+
+void safeSyserr(const char *fmt, ...) {
+	if (!interrupted) {
+		interrupted = 1;
+		cleanup();
+	}
+
+	va_list fmt_args;
+
+	fprintf(stderr, "BŁĄD: ");
+
+	va_start(fmt_args, fmt);
+	vfprintf(stderr, fmt, fmt_args);
+	va_end (fmt_args);
+	fprintf(stderr," (%d; %s)\n", errno, strerror(errno));
+	exit(1);
+}
+
 void lockMutex(const int k) {
 	int err;
 	if ((err = pthread_mutex_lock(&mutex[k])) != 0)
-		syserr("Błąd przy zajmowaniu muteksa[%d]: %d", k, err);
+		safeSyserr("Błąd przy zajmowaniu muteksa[%d]: %d", k, err);
 }
 
 
 void lockFinishMutex() {
 	int err;
 	if ((err = pthread_mutex_lock(&finishMutex)) != 0)
-		syserr("Błąd przy zajmowaniu finishMuteksa: %d", err);
+		safeSyserr("Błąd przy zajmowaniu finishMuteksa: %d", err);
 }
 
 
 void unlockFinishMutex() {
 	int err;
 	if ((err = pthread_mutex_unlock(&finishMutex)) != 0)
-		syserr("Błąd przy zwalnianiu finishMuteksa: %d", err);
+		safeSyserr("Błąd przy zwalnianiu finishMuteksa: %d", err);
 }
 
 
 void unlockMutex(const int k) {
 	int err;
 	if ((err = pthread_mutex_unlock(&mutex[k])) != 0)
-		syserr("Błąd przy zwalnianiu muteksa[%d]: %d", k, err);
+		safeSyserr("Błąd przy zwalnianiu muteksa[%d]: %d", k, err);
 }
 
 
@@ -78,7 +101,7 @@ void decreaseAlive() {
 	if (aliveThreads == 0) {
 		unlockFinishMutex();
 		if ((err = pthread_cond_signal(&finishCond)) != 0)
-			syserr("Błąd przy signal na finishCond: %d", err);
+			safeSyserr("Błąd przy signal na finishCond: %d", err);
 	}
 	unlockFinishMutex();
 }
@@ -111,11 +134,11 @@ void* clientHandler(void* data) {
 			if (debug)
 				fprintf(stderr, "PID %d czeka na %d zasobów typu %d\n", pid, waitingWith[k] + n, k);
 			if ((err = pthread_cond_wait(&resourceCond[k], &mutex[k])) != 0)
-				syserr("Błąd przy wait na resourceCond[%d]: %d", k, err);
+				safeSyserr("Błąd przy wait na resourceCond[%d]: %d", k, err);
 			if (otherN + n > resources[k] && !interrupted) { //we might have caught a wakeup that is not enough for us but is ok for somebody else
 				unlockMutex(k);
 				if ((err = pthread_cond_signal(&resourceCond[k])) != 0)
-					syserr("Błąd przy signal na resourceCond[%d]: %d", k, err);
+					safeSyserr("Błąd przy signal na resourceCond[%d]: %d", k, err);
 				lockMutex(k);
 			}
 		}
@@ -156,21 +179,21 @@ void* clientHandler(void* data) {
 	sprintf(msg.mtext, "1");
 
 	if (msgsnd(ipcOut, (char*) &msg, 2, 0) != 0)
-		syserr("Błąd przy informowaniu (zwalnianiu) klienta!");
+		safeSyserr("Błąd przy informowaniu (zwalnianiu) klienta!");
 
 	msg.mtype = otherPID;
 
 	if (msgsnd(ipcOut, (char*) &msg, 2, 0) != 0)
-		syserr("Błąd przy informowaniu (zwalnianiu) klienta!");
+		safeSyserr("Błąd przy informowaniu (zwalnianiu) klienta!");
 
 	if (debug)
 		fprintf(stderr, "%d i %d wysłały komunikaty.\n", pid, otherPID);
 
 	if (msgrcv(ipcIn, &msg, BUF_SIZE, pid, 0) == 0)
-		syserr("Otrzymano pustą odpowiedź od klienta!\n");
+		safeSyserr("Otrzymano pustą odpowiedź od klienta!\n");
 
 	if (msgrcv(ipcIn, &msg, BUF_SIZE, otherPID, 0) == 0)
-		syserr("Otrzymano pustą odpowiedź od klienta!\n");
+		safeSyserr("Otrzymano pustą odpowiedź od klienta!\n");
 
 	//free the resources
 	lockMutex(k);
@@ -181,7 +204,7 @@ void* clientHandler(void* data) {
 
 	unlockMutex(k);
 	if ((err = pthread_cond_signal(&resourceCond[k])) != 0)
-		syserr("Błąd przy signal na resourceCond[%d]: %d", k, err);
+		safeSyserr("Błąd przy signal na resourceCond[%d]: %d", k, err);
 
 	decreaseAlive();
 
@@ -200,14 +223,14 @@ void cleanup() {
 	int i = 0, err;
 	free(info);
 
-	if (msgctl(ipcIn, IPC_RMID, 0) == -1 || msgctl(ipcOut, IPC_RMID, 0) == -1)
-		syserr("Błąd przy msgctl RMID");
+	msgctl(ipcIn, IPC_RMID, 0);
+	msgctl(ipcOut, IPC_RMID, 0);
 
 	for (i = 0; i < k; ++i) {
 		if ((err = pthread_mutex_destroy(&mutex[i])) != 0)
-			syserr("Błąd przy usuwaniu muteksa[%d]: %d\n", i, err);
+			fprintf(stderr, "Błąd przy usuwaniu muteksa[%d]: %d\n", i, err);
 		if ((err = pthread_cond_destroy(&resourceCond[i])) != 0)
-			syserr("Błąd przy usuwaniu resourceCond[%d]: %d\n", i, err);
+			fprintf(stderr, "Błąd przy usuwaniu resourceCond[%d]: %d\n", i, err);
 	}
 }
 
@@ -223,7 +246,7 @@ void* signalThread(void* data) {
 	int sig, err, i;
 
 	if (signal(SIGINT, &dummyHandler) == SIG_ERR)
-		syserr("Signal");
+		safeSyserr("Signal");
 
 	sigemptyset(&block_mask);
 	sigaddset(&block_mask, SIGINT);
@@ -236,7 +259,7 @@ void* signalThread(void* data) {
 
 	for (i = 0; i < k; ++i)	//wakey!
 		if ((err = pthread_cond_broadcast(&resourceCond[i])) != 0)
-			syserr("Błąd przy broadcast na resourceCond[%d]: %d", i, err);
+			safeSyserr("Błąd przy broadcast na resourceCond[%d]: %d", i, err);
 
 	lockFinishMutex();
 
@@ -245,7 +268,7 @@ void* signalThread(void* data) {
 
 	while (aliveThreads > 0)
 		if ((err = pthread_cond_wait(&finishCond, &finishMutex)) != 0)
-			syserr("Błąd przy wait na finishCond: %d", err);
+			safeSyserr("Błąd przy wait na finishCond: %d", err);
 
 	unlockFinishMutex();
 
@@ -260,22 +283,22 @@ void initResources() {
 	int err, i;
 
 	if ((ipcIn = msgget(KEY_IN, 0666 | IPC_CREAT)) == -1)
-		syserr("Nie można otworzyć kolejki IPC o id %ld", KEY_IN);
+		safeSyserr("Nie można otworzyć kolejki IPC o id %ld", KEY_IN);
 
 	if ((ipcOut = msgget(KEY_OUT, 0666 | IPC_CREAT)) == -1)
-		syserr("Nie można otworzyć kolejki IPC o id %ld", KEY_OUT);
+		safeSyserr("Nie można otworzyć kolejki IPC o id %ld", KEY_OUT);
 
 	if ((err = pthread_mutex_init(&finishMutex, 0)) != 0)
-		syserr("Błąd przy inicjowaniu finishMuteksa]: %d", err);
+		safeSyserr("Błąd przy inicjowaniu finishMuteksa]: %d", err);
 	if ((err = pthread_cond_init(&finishCond, 0)) != 0)
-		syserr("Error przy inicjowaniu finishCond: %d", err);
+		safeSyserr("Error przy inicjowaniu finishCond: %d", err);
 
 	for (i = 0; i < k; ++i) {
 		resources[i] = n;
 		if ((err = pthread_mutex_init(&mutex[i], 0)) != 0)
-			syserr("Błąd przy inicjowaniu mutex[%d]: %d", i, err);
+			safeSyserr("Błąd przy inicjowaniu mutex[%d]: %d", i, err);
 		if ((err = pthread_cond_init(&resourceCond[i], 0)) != 0)
-			syserr("Error przy inicjowaniu resourceCond[%d]: %d", i, err);
+			safeSyserr("Error przy inicjowaniu resourceCond[%d]: %d", i, err);
 	}
 }
 
@@ -288,22 +311,22 @@ int main(const int argc, const char** argv) {
 	int err;
 
 	if (argc != 3 || (k = toUnsignedNumber(argv[1], strlen(argv[1]))) == -1 || (n = toUnsignedNumber(argv[2], strlen(argv[2]))) == -1)
-		syserr("Błędne użycie! Poprawna składnia to: ./serwer K N");
+		safeSyserr("Błędne użycie! Poprawna składnia to: ./serwer K N");
 
 	initResources();
 	//atexit(cleanup);
 
 	if ((err = pthread_attr_init(&attr)) != 0 )
-		syserr("Błąd przy attrinit: %d", err);
+		safeSyserr("Błąd przy attrinit: %d", err);
 
 	if ((err = pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE)) != 0)
-		syserr("Błąd przy setdetachstate: %d", err);
+		safeSyserr("Błąd przy setdetachstate: %d", err);
 
 	if ((err = pthread_create(&cl, &attr, &signalThread, info)) != 0)
-		syserr("Błąd przy create: %d", err);
+		safeSyserr("Błąd przy create: %d", err);
 
 	if ((err = pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED)) != 0)
-		syserr("Błąd przy setdetachstate: %d", err);
+		safeSyserr("Błąd przy setdetachstate: %d", err);
 
 	sigset_t set;
 	sigfillset(&set);
@@ -333,7 +356,7 @@ int main(const int argc, const char** argv) {
 			break;
 
 		if ((err = pthread_create(&th, &attr, &clientHandler, info)) != 0)
-			syserr("Błąd przy create: %d", err);
+			safeSyserr("Błąd przy create: %d", err);
 
 		info = NULL;
 	}
