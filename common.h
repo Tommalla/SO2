@@ -10,6 +10,7 @@
 #define BUF_SIZE 1024
 #define KEY_IN 1234L
 #define KEY_OUT 1337L
+#define KEY_RET 1666L
 
 
 #ifdef DEBUG

@@ -8,7 +8,7 @@
 #include <stdarg.h>
 #include <errno.h>
 #include "common.h"
-//#include "err.h"
+
 
 #define MAX_K 99
 
@@ -18,9 +18,12 @@ typedef unsigned short int Resource;
 
 //common data
 //queues
-int ipcIn;
-int ipcOut;
+int ipcIn;	//input
+int ipcOut;	//output
+int ipcRet;	//return resources
 
+//3 ipc queues are needed because we need to get the info about
+//returning resources even if the input is full and not being read from
 
 //mutexes and resources
 pthread_mutex_t mutex[MAX_K];
@@ -28,16 +31,21 @@ Resource resources[MAX_K];
 Resource waitingWith[MAX_K];
 pid_t waitingPID[MAX_K];
 pthread_cond_t resourceCond[MAX_K];
+
+
+//finishing (on interruption)
 pthread_mutex_t finishMutex;
 pthread_cond_t finishCond;
-
 volatile unsigned char interrupted = 0;
 unsigned int aliveThreads = 0;
 
+
 extern int sys_nerr;
+
 
 void cleanup();
 
+//a syserr version that causes an interruption if needed
 void safeSyserr(const char *fmt, ...) {
 	if (!interrupted) {
 		interrupted = 1;
@@ -55,10 +63,19 @@ void safeSyserr(const char *fmt, ...) {
 	exit(1);
 }
 
+//locking/unlocking mutexes
+
 void lockMutex(const int k) {
 	int err;
 	if ((err = pthread_mutex_lock(&mutex[k])) != 0)
 		safeSyserr("Błąd przy zajmowaniu muteksa[%d]: %d", k, err);
+}
+
+
+void unlockMutex(const int k) {
+	int err;
+	if ((err = pthread_mutex_unlock(&mutex[k])) != 0)
+		safeSyserr("Błąd przy zwalnianiu muteksa[%d]: %d", k, err);
 }
 
 
@@ -73,15 +90,10 @@ void unlockFinishMutex() {
 	int err;
 	if ((err = pthread_mutex_unlock(&finishMutex)) != 0)
 		safeSyserr("Błąd przy zwalnianiu finishMuteksa: %d", err);
+	fprintf(stderr, "Unlock finish mutex\n");
 }
 
-
-void unlockMutex(const int k) {
-	int err;
-	if ((err = pthread_mutex_unlock(&mutex[k])) != 0)
-		safeSyserr("Błąd przy zwalnianiu muteksa[%d]: %d", k, err);
-}
-
+//counting the number of living threads
 
 void increaseAlive() {
 	lockFinishMutex();
@@ -92,12 +104,12 @@ void increaseAlive() {
 
 void decreaseAlive() {
 	int err;
-	if (debug)
-		fprintf(stderr, "Usiłuję skończyć wątek\n");
 	lockFinishMutex();
 	--aliveThreads;
+
 	if (debug)
 		fprintf(stderr, "Kończę wątek! Alive = %d\n", aliveThreads);
+
 	if (aliveThreads == 0) {
 		unlockFinishMutex();
 		if ((err = pthread_cond_signal(&finishCond)) != 0)
@@ -106,7 +118,7 @@ void decreaseAlive() {
 	unlockFinishMutex();
 }
 
-
+//the thread body that handles the clients
 void* clientHandler(void* data) {
 	int pid, k, n, otherPID, otherN;
 	pid = ((struct ClientInfo*)data)->pid;
@@ -144,8 +156,6 @@ void* clientHandler(void* data) {
 		}
 
 		if (interrupted) {
-			if (debug)
-				fprintf(stderr, "int\n");
 			unlockMutex(k);
 			decreaseAlive();
 
@@ -189,10 +199,17 @@ void* clientHandler(void* data) {
 	if (debug)
 		fprintf(stderr, "%d i %d wysłały komunikaty.\n", pid, otherPID);
 
-	if (msgrcv(ipcIn, &msg, BUF_SIZE, pid, 0) == 0)
+	if (interrupted) {
+		unlockMutex(k);
+		decreaseAlive();
+
+		return (void*) 0;
+	}
+
+	if (msgrcv(ipcRet, &msg, BUF_SIZE, pid, 0) == 0)
 		safeSyserr("Otrzymano pustą odpowiedź od klienta!\n");
 
-	if (msgrcv(ipcIn, &msg, BUF_SIZE, otherPID, 0) == 0)
+	if (msgrcv(ipcRet, &msg, BUF_SIZE, otherPID, 0) == 0)
 		safeSyserr("Otrzymano pustą odpowiedź od klienta!\n");
 
 	//free the resources
@@ -212,6 +229,7 @@ void* clientHandler(void* data) {
 }
 
 
+//data needed for cleanup
 struct ClientInfo* info = NULL;
 int k, n;
 
@@ -225,6 +243,12 @@ void cleanup() {
 
 	msgctl(ipcIn, IPC_RMID, 0);
 	msgctl(ipcOut, IPC_RMID, 0);
+	msgctl(ipcRet, IPC_RMID, 0);
+
+// 	if ((err = pthread_mutex_destroy(&finishMutex)) != 0)
+// 		fprintf(stderr, "Błąd przy usuwaniu finishMuteksa: %d\n", err);
+	if ((err = pthread_cond_destroy(&finishCond)) != 0)
+		fprintf(stderr, "Błąd przy usuwaniu finishCond: %d\n", err);
 
 	for (i = 0; i < k; ++i) {
 		if ((err = pthread_mutex_destroy(&mutex[i])) != 0)
@@ -287,6 +311,9 @@ void initResources() {
 
 	if ((ipcOut = msgget(KEY_OUT, 0666 | IPC_CREAT)) == -1)
 		safeSyserr("Nie można otworzyć kolejki IPC o id %ld", KEY_OUT);
+
+	if ((ipcRet = msgget(KEY_RET, 0666 | IPC_CREAT)) == -1)
+		safeSyserr("Nie można otworzyć kolejki IPC o id %ld", KEY_RET);
 
 	if ((err = pthread_mutex_init(&finishMutex, 0)) != 0)
 		safeSyserr("Błąd przy inicjowaniu finishMuteksa]: %d", err);

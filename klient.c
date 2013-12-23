@@ -9,7 +9,7 @@
 
 int main(const int argc, const char** argv) {
 	int k = 0, n, s;
-	int ipcIn, ipcOut;
+	int ipcIn, ipcOut, ipcRet;
 	pid_t pid = getpid();
 
 	if (argc != 4 || (k = toUnsignedNumber(argv[1], strlen(argv[1]))) == -1 || (n = toUnsignedNumber(argv[2], strlen(argv[2]))) == -1 ||
@@ -23,6 +23,9 @@ int main(const int argc, const char** argv) {
 
 	if ((ipcOut = msgget(KEY_IN, 0666)) == -1)
 		syserr("Nie można otworzyć kolejki IPC o id %ld", KEY_OUT);
+
+	if ((ipcRet = msgget(KEY_RET, 0666)) == -1)
+		syserr("Nie można otworzyć kolejki IPC o id %ld", KEY_RET);
 
 	struct Message msg;
 
@@ -49,7 +52,7 @@ int main(const int argc, const char** argv) {
 	msg.mtype = pid;
 	sprintf(msg.mtext, "1");
 
-	if (msgsnd(ipcOut, (char*) &msg, 2, 0) != 0)
+	if (msgsnd(ipcRet, (char*) &msg, 2, 0) != 0)
 		syserr("Błąd podczas próby zwolnienia zasobów!");
 
 	printf("%d KONIEC\n", pid);
