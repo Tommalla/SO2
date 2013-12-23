@@ -29,7 +29,7 @@ pthread_cond_t resourceCond[MAX_K];
 pthread_mutex_t finishMutex;
 pthread_cond_t finishCond;
 
-unsigned char interrupted = 0;
+volatile unsigned char interrupted = 0;
 unsigned int aliveThreads = 0;
 
 void lockMutex(const int k) {
@@ -112,7 +112,7 @@ void* clientHandler(void* data) {
 				fprintf(stderr, "PID %d czeka na %d zasobów typu %d\n", pid, waitingWith[k] + n, k);
 			if ((err = pthread_cond_wait(&resourceCond[k], &mutex[k])) != 0)
 				syserr("Błąd przy wait na resourceCond[%d]: %d", k, err);
-			if (otherN + n > resources[k] || interrupted) { //we might have caught a wakeup that is not enough for us but is ok for somebody else
+			if (otherN + n > resources[k] && !interrupted) { //we might have caught a wakeup that is not enough for us but is ok for somebody else
 				unlockMutex(k);
 				if ((err = pthread_cond_signal(&resourceCond[k])) != 0)
 					syserr("Błąd przy signal na resourceCond[%d]: %d", k, err);
@@ -231,14 +231,12 @@ void* signalThread(void* data) {
 	fprintf(stderr, "Dostałem sygnał!\n");
 	interrupted = 1;
 
-	//wake up main if there is a need to:
 	struct Message msg;
 	msg.mtype = 1L;
 
-	for (int j = 0; j < n; ++j)
-		for (i = 0; i < k; ++i)	//wakey!
-			if ((err = pthread_cond_signal(&resourceCond[i])) != 0)
-				syserr("Błąd przy signal na resourceCond[%d]: %d", i, err);
+	for (i = 0; i < k; ++i)	//wakey!
+		if ((err = pthread_cond_broadcast(&resourceCond[i])) != 0)
+			syserr("Błąd przy broadcast na resourceCond[%d]: %d", i, err);
 
 	lockFinishMutex();
 
@@ -251,6 +249,7 @@ void* signalThread(void* data) {
 
 	unlockFinishMutex();
 
+	//wake up main if there is a need to:
 	msgsnd(ipcIn, (char*) &msg, 2, IPC_NOWAIT);
 
 	return (void*) 0;
