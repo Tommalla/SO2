@@ -45,6 +45,7 @@ extern int sys_nerr;
 
 void cleanup();
 
+
 //a syserr version that causes an interruption if needed
 void safeSyserr(const char *fmt, ...) {
 	if (!interrupted) {
@@ -90,7 +91,6 @@ void unlockFinishMutex() {
 	int err;
 	if ((err = pthread_mutex_unlock(&finishMutex)) != 0)
 		safeSyserr("Błąd przy zwalnianiu finishMuteksa: %d", err);
-	fprintf(stderr, "Unlock finish mutex\n");
 }
 
 //counting the number of living threads
@@ -114,11 +114,12 @@ void decreaseAlive() {
 		unlockFinishMutex();
 		if ((err = pthread_cond_signal(&finishCond)) != 0)
 			safeSyserr("Błąd przy signal na finishCond: %d", err);
-	}
-	unlockFinishMutex();
+	} else
+		unlockFinishMutex();
 }
 
-//the thread body that handles the clients
+
+//the body of the thread that handles the clients
 void* clientHandler(void* data) {
 	int pid, k, n, otherPID, otherN;
 	pid = ((struct ClientInfo*)data)->pid;
@@ -200,14 +201,17 @@ void* clientHandler(void* data) {
 		fprintf(stderr, "%d i %d wysłały komunikaty.\n", pid, otherPID);
 
 	if (interrupted) {
-		unlockMutex(k);
 		decreaseAlive();
-
 		return (void*) 0;
 	}
 
 	if (msgrcv(ipcRet, &msg, BUF_SIZE, pid, 0) == 0)
 		safeSyserr("Otrzymano pustą odpowiedź od klienta!\n");
+
+	if (interrupted) {
+		decreaseAlive();
+		return (void*) 0;
+	}
 
 	if (msgrcv(ipcRet, &msg, BUF_SIZE, otherPID, 0) == 0)
 		safeSyserr("Otrzymano pustą odpowiedź od klienta!\n");
@@ -245,8 +249,8 @@ void cleanup() {
 	msgctl(ipcOut, IPC_RMID, 0);
 	msgctl(ipcRet, IPC_RMID, 0);
 
-// 	if ((err = pthread_mutex_destroy(&finishMutex)) != 0)
-// 		fprintf(stderr, "Błąd przy usuwaniu finishMuteksa: %d\n", err);
+ 	if ((err = pthread_mutex_destroy(&finishMutex)) != 0)
+ 		fprintf(stderr, "Błąd przy usuwaniu finishMuteksa: %d\n", err);
 	if ((err = pthread_cond_destroy(&finishCond)) != 0)
 		fprintf(stderr, "Błąd przy usuwaniu finishCond: %d\n", err);
 
@@ -270,12 +274,12 @@ void* signalThread(void* data) {
 	int sig, err, i;
 
 	if (signal(SIGINT, &dummyHandler) == SIG_ERR)
-		safeSyserr("Signal");
+		safeSyserr("Błąd podczas podpinania signal w signalThread");
 
 	sigemptyset(&block_mask);
 	sigaddset(&block_mask, SIGINT);
 	sigwait(&block_mask, &sig);	//wait for the signal
-	fprintf(stderr, "Dostałem sygnał!\n");
+	printf("SIGINT. Czekam na oddanie zajętych zasobów...\n");
 	interrupted = 1;
 
 	struct Message msg;
@@ -341,7 +345,6 @@ int main(const int argc, const char** argv) {
 		safeSyserr("Błędne użycie! Poprawna składnia to: ./serwer K N");
 
 	initResources();
-	//atexit(cleanup);
 
 	if ((err = pthread_attr_init(&attr)) != 0 )
 		safeSyserr("Błąd przy attrinit: %d", err);
@@ -357,7 +360,6 @@ int main(const int argc, const char** argv) {
 
 	sigset_t set;
 	sigfillset(&set);
-	//sigaddset(&set, SIGINT);
 	sigprocmask(SIG_BLOCK, &set, NULL);
 
 	struct Message msg;
@@ -396,4 +398,3 @@ int main(const int argc, const char** argv) {
 
 	return 0;
 }
-

@@ -1,6 +1,6 @@
 .PHONY: clean
 
-CFLAGS = -Wall -pedantic -std=c99
+CFLAGS = -Wall -std=c99
 IPC_FLAGS = -D_XOPEN_SOURCE=600
 
 ifeq ($(debug),1)
