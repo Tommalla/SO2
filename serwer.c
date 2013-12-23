@@ -132,26 +132,43 @@ void* clientHandler(void* data) {
 
 
 struct ClientInfo* info = NULL;
+int k, n;
 
 
-void exit_server(int sig) {
+//this method should be called once at the end of program to free all used resources
+void cleanup() {
+	if (debug)
+		fprintf(stderr, "Uruchamiam cleanup!\n");
+	int i = 0, err;
 	free(info);
+
 	if (msgctl(ipcIn, IPC_RMID, 0) == -1 || msgctl(ipcOut, IPC_RMID, 0) == -1)
 		syserr("Błąd przy msgctl RMID");
+
+	for (i = 0; i < k; ++i) {
+		if ((err = pthread_mutex_destroy(&mutex[i])) != 0)
+			syserr("Błąd przy usuwaniu muteksa[%d]: %d\n", i, err);
+		if ((err = pthread_cond_destroy(&resourceCond[i])) != 0)
+			syserr("Błąd przy usuwaniu resourceCond[%d]: %d\n", i, err);
+	}
+}
+
+
+void exitServer(int sig) {
+	//cleanup();
 	exit(0);
 }
 
 
-int main(const int argc, const char** argv) {
-	int k = 0, n = 0, len = 0;
-	pthread_t th;
-	pthread_attr_t attr;
+void initResources() {
 	int err, i;
 
-	if (argc != 3 || (k = toUnsignedNumber(argv[1], strlen(argv[1]))) == -1 || (n = toUnsignedNumber(argv[2], strlen(argv[2]))) == -1)
-		syserr("Błędne użycie! Poprawna składnia to: ./serwer K N");
+	if ((ipcIn = msgget(KEY_IN, 0666 | IPC_CREAT)) == -1)
+		syserr("Nie można otworzyć kolejki IPC o id %ld", KEY_IN);
 
-	//FIXME delete mutexes and conditions (afterwards)
+	if ((ipcOut = msgget(KEY_OUT, 0666 | IPC_CREAT)) == -1)
+		syserr("Nie można otworzyć kolejki IPC o id %ld", KEY_OUT);
+
 	for (i = 0; i < k; ++i) {
 		resources[i] = n;
 		if ((err = pthread_mutex_init(&mutex[i], 0)) != 0)
@@ -159,15 +176,23 @@ int main(const int argc, const char** argv) {
 		if ((err = pthread_cond_init(&resourceCond[i], 0)) != 0)
 			syserr("Error przy inicjowaniu resourceCond[%d]: %d", i, err);
 	}
+}
 
-	if (signal(SIGINT,  exit_server) == SIG_ERR)
+
+int main(const int argc, const char** argv) {
+	int len = 0;
+	pthread_t th;
+	pthread_attr_t attr;
+	int err;
+
+	if (argc != 3 || (k = toUnsignedNumber(argv[1], strlen(argv[1]))) == -1 || (n = toUnsignedNumber(argv[2], strlen(argv[2]))) == -1)
+		syserr("Błędne użycie! Poprawna składnia to: ./serwer K N");
+
+	initResources();
+	atexit(cleanup);
+
+	if (signal(SIGINT, exitServer) == SIG_ERR)
 		syserr("Błąd przy wywołaniu signal");
-
-	if ((ipcIn = msgget(KEY_IN, 0666 | IPC_CREAT)) == -1)
-		syserr("Nie można otworzyć kolejki IPC o id %ld", KEY_IN);
-
-	if ((ipcOut = msgget(KEY_OUT, 0666 | IPC_CREAT)) == -1)
-		syserr("Nie można otworzyć kolejki IPC o id %ld", KEY_OUT);
 
 	struct Message msg;
 
